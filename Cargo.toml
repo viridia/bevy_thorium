@@ -1,0 +1,10 @@
+[package]
+name = "bevy_thorium"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = { git = "https://github.com/cart/bevy.git", version = "0.17.0-dev", branch = "next-gen-scenes", features = [
+  "ghost_nodes",
+  "experimental_bevy_feathers",
+] }
