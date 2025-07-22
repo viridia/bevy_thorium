@@ -6,7 +6,7 @@ use bevy::{
     scene2::{CommandsSpawnScene, bsn},
     ui,
 };
-use bevy_thorium::{ThoriumPlugin, insert_when};
+use bevy_thorium::{ThoriumPlugin, calc};
 
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum GameState {
@@ -29,7 +29,7 @@ fn main() {
 }
 
 fn setup_view_root(mut commands: Commands) {
-    let camera = commands.spawn((Camera::default(), Camera2d)).id();
+    commands.spawn((Camera::default(), Camera2d));
 
     commands.spawn_scene(bsn!(
         Node {
@@ -44,35 +44,18 @@ fn setup_view_root(mut commands: Commands) {
         // Needs template implementation.
         // UiTargetCamera(camera)
         BorderColor::all(css::ALICE_BLUE.into())
-        insert_when(
-            |state: Res<State<GameState>>| *state.get() == GameState::Play,
-            || BackgroundColor(css::GREEN_YELLOW.into()),
+        calc(
+            |state: Res<State<GameState>>| *state.get(),
+            |entity, state| {
+                entity.insert(BackgroundColor(match state {
+                    GameState::Play => css::GREEN_YELLOW.into(),
+                    GameState::Pause => css::GRAY.into(),
+                    GameState::Intro => css::BLUE.into(),
+                }));
+            }
         )
-        // Doesn't work: Missing Generics
-        // InsertWhen::new(
-        //     |state: Res<State<GameState>>| *state.get() == GameState::Intro,
-        //     || BackgroundColor(css::ANTIQUE_WHITE.into()),
-        // )
         [
             Text("Game State: "),
-            // switch(
-            //     |state: Res<State<GameState>>| *state.get(),
-            //     |cases| {
-            //         cases
-            //             .case(GameState::Intro, || bsn_list!{ Text("Intro") })
-            //             .case(GameState::Pause, || bsn_list!{ Text("Paused") })
-            //             .fallback(|| bsn_list!{ Text("Playing") });
-            //     },
-            // )
-            // Switch::new(
-            //     |state: Res<State<GameState>>| *state.get(),
-            //     |cases| {
-            //         cases
-            //             .case(GameState::Intro, || Spawn(Text::new("Intro")))
-            //             .case(GameState::Pause, || Spawn(Text::new("Paused")))
-            //             .fallback(|| Spawn(Text::new("Playing")));
-            //     },
-            // ),
         ]
     ));
 }

@@ -1,0 +1,179 @@
+#![allow(clippy::type_complexity)]
+use bevy::{
+    ecs::system::SystemId,
+    prelude::*,
+    scene2::{Scene, SceneList, SpawnScene},
+    ui::experimental::GhostNode,
+};
+
+use crate::{
+    Computations,
+    effect_cell::{AnyEffect, EffectCell},
+    // owner::Owned,
+};
+
+/// Trait that represents a function that can produce a [`SpawnableList`].
+pub trait SceneListFn: Send + Sync {
+    fn spawn(&self, world: &mut World, entity: Entity);
+}
+
+impl<S: SceneList, F: Fn() -> S + Clone + Send + Sync> SceneListFn for F {
+    fn spawn(&self, world: &mut World, entity: Entity) {
+        // self().spawn(world, entity);
+    }
+}
+
+pub struct CaseBuilder<'a, Value: Send + Sync> {
+    cases: &'a mut Vec<(Value, Box<dyn SceneListFn + Send + Sync>)>,
+    fallback: &'a mut Option<Box<dyn SceneListFn + Send + Sync>>,
+}
+
+impl<Value: Send + Sync> CaseBuilder<'_, Value> {
+    pub fn case<CF: Send + Sync + 'static + SceneListFn>(
+        &mut self,
+        value: Value,
+        case_fn: CF,
+    ) -> &mut Self {
+        self.cases.push((value, Box::new(case_fn)));
+        self
+    }
+
+    pub fn fallback<FF: Send + Sync + 'static + SceneListFn>(
+        &mut self,
+        fallback_fn: FF,
+    ) -> &mut Self {
+        *self.fallback = Some(Box::new(fallback_fn));
+        self
+    }
+}
+
+/// Conditional control-flow node that implements a C-like "switch" statement.
+struct SwitchEffect<P> {
+    switch_index: usize,
+    value_sys: SystemId<(), P>,
+    cases: Vec<(P, Box<dyn SceneListFn + Send + Sync>)>,
+    fallback: Option<Box<dyn SceneListFn + Send + Sync>>,
+}
+
+impl<P: PartialEq + Send + Sync + 'static> SwitchEffect<P> {
+    /// Adds a new switch case.
+    #[allow(dead_code)]
+    pub fn case<F: SceneListFn + Send + Sync + 'static>(mut self, value: P, case: F) -> Self {
+        self.cases.push((value, Box::new(case)));
+        self
+    }
+
+    /// Sets the fallback case.
+    #[allow(dead_code)]
+    pub fn fallback<F: SceneListFn + Send + Sync + 'static>(mut self, fallback: F) -> Self {
+        self.fallback = Some(Box::new(fallback));
+        self
+    }
+}
+
+impl<P: PartialEq + Send + Sync + 'static> AnyEffect for SwitchEffect<P> {
+    fn update(&mut self, world: &mut World, entity: Entity) {
+        // Run the condition and see if the result changed.
+        let value = world.run_system(self.value_sys);
+        if let Ok(value) = value {
+            let index = self
+                .cases
+                .iter()
+                .enumerate()
+                .find_map(|(i, f)| if f.0 == value { Some(i) } else { None })
+                .unwrap_or(usize::MAX);
+
+            if self.switch_index != index {
+                self.switch_index = index;
+                let mut commands = world.commands();
+                let mut entt = commands.entity(entity);
+                entt.despawn_related::<Children>();
+                entt.despawn_related::<Computations>();
+                // entt.despawn_related::<Owned>();
+                if index < self.cases.len() {
+                    // self.cases[index].1.spawn(world, entity);
+                } else if let Some(fallback) = self.fallback.as_mut() {
+                    // world.entity_mut(entity).spawn_scene(fallback);
+                    // fallback.spawn(world, entity);
+                };
+            }
+        }
+    }
+
+    fn cleanup(&self, world: &mut bevy::ecs::world::DeferredWorld, _entity: Entity) {
+        world.commands().unregister_system(self.value_sys);
+    }
+}
+
+pub struct Switch<
+    M: Send + Sync + 'static,
+    P: PartialEq + Send + Sync + 'static,
+    ValueFn: IntoSystem<(), P, M> + Send + Sync + 'static,
+> {
+    value_fn: ValueFn,
+    cases: Vec<(P, Box<dyn SceneListFn + Send + Sync>)>,
+    fallback: Option<Box<dyn SceneListFn + Send + Sync>>,
+    marker: std::marker::PhantomData<M>,
+}
+
+impl<
+    M: Send + Sync + 'static,
+    P: PartialEq + Send + Sync + 'static,
+    ValueFn: IntoSystem<(), P, M> + Send + Sync + 'static,
+> Switch<M, P, ValueFn>
+{
+    pub fn new<CF: Fn(&mut CaseBuilder<P>)>(value_fn: ValueFn, cases_fn: CF) -> Self {
+        let mut cases: Vec<(P, Box<dyn SceneListFn + Send + Sync>)> = Vec::new();
+        let mut fallback: Option<Box<dyn SceneListFn + Send + Sync>> = None;
+
+        let mut case_builder = CaseBuilder {
+            cases: &mut cases,
+            fallback: &mut fallback,
+        };
+        cases_fn(&mut case_builder);
+
+        Self {
+            value_fn,
+            cases,
+            fallback,
+            marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<
+    M: Send + Sync + 'static,
+    P: PartialEq + Send + Sync + 'static,
+    ValueFn: IntoSystem<(), P, M> + Clone + Send + Sync + 'static,
+> Template for Switch<M, P, ValueFn>
+{
+    type Output = ();
+
+    fn build(&mut self, entity: &mut EntityWorldMut) -> Result<Self::Output> {
+        let value_sys = entity.world_scope(|world| world.register_system(self.value_fn.clone()));
+        entity.insert((
+            EffectCell::new(SwitchEffect {
+                cases: self.cases,
+                fallback: self.fallback,
+                value_sys,
+                switch_index: usize::MAX - 1, // Means no case selected yet.
+            }),
+            GhostNode,
+            // Fragment,
+        ));
+        Ok(())
+    }
+}
+
+pub fn switch<
+    M: Send + Sync + 'static,
+    P: PartialEq + Send + Sync + 'static,
+    ValueFn: IntoSystem<(), P, M> + Send + Sync + 'static,
+    CF: Fn(&mut CaseBuilder<P>),
+>(
+    value_fn: ValueFn,
+    case_fn: CF,
+) -> impl Scene {
+    todo!();
+    ()
+}

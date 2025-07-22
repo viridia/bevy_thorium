@@ -1,11 +1,16 @@
 use bevy::prelude::*;
 
+mod calc;
 mod computations;
 mod effect_cell;
 mod insert_when;
+mod signal;
+// mod switch;
 
+pub use calc::{Calc, calc};
 pub use computations::{ComputationOf, Computations};
-pub use insert_when::{InsertWhen, insert_when};
+pub use insert_when::{InsertWhen, InsertWhenId, insert_when, insert_when_id};
+// pub use switch::switch;
 
 use crate::effect_cell::update_effects;
 

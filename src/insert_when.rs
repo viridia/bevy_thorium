@@ -123,3 +123,52 @@ pub fn insert_when<
         marker: std::marker::PhantomData,
     }
 }
+
+pub struct InsertWhenId<B: Bundle, FactoryFn: Fn() -> B + Clone + Send + Sync + 'static> {
+    test_fn: SystemId<(), bool>,
+    factory: FactoryFn,
+}
+
+impl<B: Bundle, FactoryFn: Fn() -> B + Clone + Send + Sync + 'static> InsertWhenId<B, FactoryFn> {
+    pub fn new(test_fn: SystemId<(), bool>, factory: FactoryFn) -> Self {
+        Self { test_fn, factory }
+    }
+}
+
+impl<B: Bundle, FactoryFn: Fn() -> B + Clone + Send + Sync + 'static> Template
+    for InsertWhenId<B, FactoryFn>
+{
+    type Output = ();
+
+    fn build(&mut self, parent: &mut EntityWorldMut) -> Result<Self::Output> {
+        parent.with_related::<ComputationOf>(EffectCell::new(InsertWhenEffect {
+            state: false,
+            test_sys: self.test_fn,
+            factory: self.factory.clone(),
+        }));
+        Ok(())
+    }
+}
+
+impl<B: Bundle, FactoryFn: Fn() -> B + Clone + Send + Sync + 'static> Scene
+    for InsertWhenId<B, FactoryFn>
+{
+    fn patch(
+        &self,
+        _assets: &AssetServer,
+        _patches: &Assets<bevy::scene2::ScenePatch>,
+        scene: &mut bevy::scene2::ResolvedScene,
+    ) {
+        scene.push_template(InsertWhenId {
+            test_fn: self.test_fn,
+            factory: self.factory.clone(),
+        });
+    }
+}
+
+pub fn insert_when_id<B: Bundle, FactoryFn: Fn() -> B + Clone + Send + Sync + 'static>(
+    test_fn: SystemId<(), bool>,
+    factory: FactoryFn,
+) -> impl Scene {
+    InsertWhenId { test_fn, factory }
+}
