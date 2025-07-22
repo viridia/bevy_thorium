@@ -41,21 +41,33 @@ fn setup_view_root(mut commands: Commands) {
             flex_direction: ui::FlexDirection::Row,
             border: ui::UiRect::all(ui::Val::Px(3.)),
         }
-        // Needs template implementation.
-        // UiTargetCamera(camera)
         BorderColor::all(css::ALICE_BLUE.into())
         calc(
             |state: Res<State<GameState>>| *state.get(),
             |entity, state| {
                 entity.insert(BackgroundColor(match state {
-                    GameState::Play => css::GREEN_YELLOW.into(),
-                    GameState::Pause => css::GRAY.into(),
+                    GameState::Play => css::DARK_GREEN.into(),
+                    GameState::Pause => css::DARK_GRAY.into(),
                     GameState::Intro => css::BLUE.into(),
                 }));
             }
         )
         [
             Text("Game State: "),
+            (
+                Text("")
+                calc(
+                    |state: Res<State<GameState>>| *state.get(),
+                    |entity, state| {
+                        if let Some(mut text) = entity.get_mut::<Text>() {
+                            text.0 = match state {
+                                GameState::Play => "Play",
+                                GameState::Pause => "Pause",
+                                GameState::Intro => "Intro",
+                            }.into()
+                        }
+                    })
+            )
         ]
     ));
 }

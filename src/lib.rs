@@ -4,7 +4,7 @@ mod calc;
 mod computations;
 mod effect_cell;
 mod insert_when;
-mod signal;
+// mod signal;
 // mod switch;
 
 pub use calc::{Calc, calc};

@@ -29,7 +29,7 @@ fn main() {
 }
 
 fn setup_view_root(mut commands: Commands) {
-    let camera = commands.spawn((Camera::default(), Camera2d)).id();
+    commands.spawn((Camera::default(), Camera2d));
 
     commands.spawn_scene(bsn!(
         Node {
